@@ -1,6 +1,6 @@
 # Alerte Steam Deck reconditionné (France)
 
-GitHub Action qui vérifie toutes les ~15 min (de 6h à minuit, heure de Paris) la page
+GitHub Action qui vérifie toutes les ~5 min (de 6h à minuit, heure de Paris) la page
 [Steam Deck Certified Refurbished](https://store.steampowered.com/sale/steamdeckrefurbished)
 (région FR) et envoie un message Telegram dès qu'**un modèle** (LCD 64/256/512 Go, OLED 512 Go/1 To)
 passe en stock, puis quand il repasse en rupture.

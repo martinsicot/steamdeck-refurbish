@@ -2,9 +2,9 @@ name: Steam Deck refurb alert
 
 on:
   schedule:
-    # Toutes les 15 min (:07/:22/:37/:52), heures en UTC. 4h-22h UTC couvre 6h-minuit à Paris été comme hiver ;
-    # le job "gate" coupe ensuite exactement entre 00:00 et 06:00 heure de Paris.
-    - cron: "7-59/15 4-22 * * *"   # :07, :22, :37, :52 (évite les créneaux chargés :00/:30)
+    # Toutes les 5 min (:02, :07, :12…, évite :00/:30), heures en UTC. 4h-22h UTC couvre 6h-minuit
+    # à Paris été comme hiver ; le job "gate" coupe ensuite exactement entre 00:00 et 06:00 heure de Paris.
+    - cron: "2-59/5 4-22 * * *"
   workflow_dispatch:
     inputs:
       test_telegram:
