@@ -1,0 +1,88 @@
+name: Steam Deck refurb alert
+
+on:
+  schedule:
+    # Toutes les 15 min (:07/:22/:37/:52), heures en UTC. 4h-22h UTC couvre 6h-minuit à Paris été comme hiver ;
+    # le job "gate" coupe ensuite exactement entre 00:00 et 06:00 heure de Paris.
+    - cron: "7-59/15 4-22 * * *"   # :07, :22, :37, :52 (évite les créneaux chargés :00/:30)
+  workflow_dispatch:
+    inputs:
+      test_telegram:
+        description: "Envoyer un message Telegram de test"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # pour commiter state.json
+
+concurrency:
+  group: steamdeck-alert
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.hour.outputs.run }}
+    steps:
+      - id: hour
+        run: |
+          h=$(TZ=Europe/Paris date +%-H)
+          echo "Heure de Paris : $(TZ=Europe/Paris date +%H:%M)"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$h" -ge 6 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nuit (00h-06h à Paris) : vérification sautée."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  check:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Cache Chromium (Playwright)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+
+      - name: Install
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Check stock
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_TELEGRAM: ${{ inputs.test_telegram }}
+        run: python check_stock.py
+
+      - name: Screenshot de debug
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug
+          path: debug/
+          retention-days: 2
+
+      - name: Save state
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          if ! git diff --cached --quiet; then
+            git commit -m "state: stock update"
+            git pull --rebase
+            git push
+          fi
