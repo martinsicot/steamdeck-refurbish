@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Transforme des lignes JSON (steamdeck-trigger.log) en lignes de tableau lisibles.
+#   steamdeck-table < ~/.local/state/steamdeck-trigger.log      -> tableau complet (avec en-tête)
+#   steamdeck-table --row < une_ligne.json                      -> une seule ligne, sans en-tête
+export PATH=/usr/bin:/bin
+FMT='%-19s | %-8s | %-8s | %-8s | %-8s | %-8s | %-6s | %s\n'
+header() {
+  printf "$FMT" "DATE" "OLED 512" "OLED 1TB" "LCD 64" "LCD 256" "LCD 512" "RÉGION" "RUN"
+  printf "$FMT" "-------------------" "--------" "--------" "--------" "--------" "--------" "------" "-------"
+}
+[ "${1:-}" = "--row" ] || header
+grep '^{' | jq -r '
+  def cell($m; $c):
+    ([.products[]? | select(.model==$m and .capacity==$c)] | first) as $p
+    | if $p == null then "?" elif $p.in_stock then "DISPO" else "-" end;
+  [ .date,
+    cell("OLED";"512GB"), cell("OLED";"1TB"), cell("LCD";"64GB"), cell("LCD";"256GB"), cell("LCD";"512GB"),
+    (.region // "?"),
+    ( if .triggered == false then "ECHEC déclenchement"
+      elif .skipped_night then "nuit (sauté)"
+      elif .conclusion == "success" then "ok"
+      else "ECHEC \(.error // .conclusion // "")" end )
+  ] | @tsv' | while IFS=$'\t' read -r d a b c e f r s; do printf "$FMT" "$d" "$a" "$b" "$c" "$e" "$f" "$r" "$s"; done

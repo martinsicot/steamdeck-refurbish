@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Déclenche le workflow GitHub "Steam Deck refurb alert", attend sa fin et
+# ajoute une ligne JSON (JSONL) dans ~/.local/state/steamdeck-trigger.log
+set -u
+export PATH=/usr/bin:/bin
+REPO=martinsicot/steamdeck-refurbish
+LOG=$HOME/.local/state/steamdeck-trigger.log
+mkdir -p "$(dirname "$LOG")"
+
+started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+emit() { jq -cn --arg local "$(date '+%F %T')" --arg started "$started" "$@" >> "$LOG"; }
+
+if ! err=$(gh workflow run steamdeck.yml -R "$REPO" 2>&1); then
+  emit --arg error "$err" '{date:$local, triggered:false, error:$error}'
+  exit 1
+fi
+
+# Retrouver le run créé par ce déclenchement
+run=""
+for _ in $(seq 15); do
+  sleep 3
+  run=$(gh run list -R "$REPO" -w steamdeck.yml -e workflow_dispatch -L 5 \
+          --json databaseId,createdAt,url \
+          --jq "[.[] | select(.createdAt >= \"$started\")] | sort_by(.createdAt) | first // empty")
+  [ -n "$run" ] && break
+done
+if [ -z "$run" ]; then
+  emit '{date:$local, triggered:true, run_id:null, error:"run introuvable après 45 s"}'
+  exit 1
+fi
+id=$(jq -r .databaseId <<<"$run"); url=$(jq -r .url <<<"$run")
+
+# Attendre la fin (max 8 min)
+status=""; conclusion=""
+for _ in $(seq 48); do
+  read -r status conclusion < <(gh run view "$id" -R "$REPO" --json status,conclusion --jq '"\(.status) \(.conclusion)"')
+  [ "$status" = completed ] && break
+  sleep 10
+done
+
+# Extraire les infos utiles du log du run
+logtxt=$(gh run view "$id" -R "$REPO" --log 2>/dev/null | sed 's/^[^\t]*\t[^\t]*\t[^ ]* //')
+region=$(grep -m1 -oP 'Région détectée par Steam : \K\S+' <<<"$logtxt")
+skipped=$(grep -q '^Nuit (00h-06h à Paris) : vérification sautée' <<<"$logtxt" && echo true || echo false)
+error=$(grep -m1 -oP 'ERREUR : \K.*' <<<"$logtxt")
+products=$(grep -P '\] (rupture|EN STOCK) +: ' <<<"$logtxt" \
+  | sed -E 's/.*\] (rupture|EN STOCK) +: (\S+) (\S+) ?([^|]*)\|.*/\1\t\2\t\3\t\4/' \
+  | jq -Rsc 'split("\n") | map(select(length>0) | split("\t")
+      | {model:.[1], capacity:.[2], price:(.[3]|rtrimstr(" ")|if .=="" then null else . end), in_stock:(.[0]=="EN STOCK")})')
+
+emit --argjson id "$id" --arg url "$url" --arg status "$status" --arg conclusion "$conclusion" \
+ --arg region "$region" --argjson skipped "$skipped" \
+     --arg error "$error" --argjson products "${products:-[]}" \
+  '{date:$local, triggered:true, run_id:$id, url:$url, status:$status, conclusion:$conclusion,
+    skipped_night:$skipped, region:(if $region=="" then null else $region end),
+    in_stock:[$products[]|select(.in_stock)|"\(.model) \(.capacity)"],
+    products:$products, error:(if $error=="" then null else $error end)}'
+
+# Version lisible : une ligne de tableau par run dans steamdeck-stock.txt
+TABLE=$HOME/.local/state/steamdeck-stock.txt
+[ -s "$TABLE" ] || "$HOME/.local/bin/steamdeck-table" < /dev/null > "$TABLE"
+tail -1 "$LOG" | "$HOME/.local/bin/steamdeck-table" --row >> "$TABLE"

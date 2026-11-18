@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Affiche l'en-tête du tableau + les N dernières lignes (20 par défaut). -f pour suivre en direct.
+T=$HOME/.local/state/steamdeck-stock.txt
+head -2 "$T"
+if [ "${1:-}" = "-f" ]; then tail -n 20 -f "$T" | grep --line-buffered -v -e '^DATE' -e '^----'
+else tail -n "${1:-20}" "$T" | grep -v -e '^DATE' -e '^----'; fi
