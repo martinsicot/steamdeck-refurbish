@@ -41,7 +41,7 @@ done
 # Extraire les infos utiles du log du run
 logtxt=$(gh run view "$id" -R "$REPO" --log 2>/dev/null | sed 's/^[^\t]*\t[^\t]*\t[^ ]* //')
 region=$(grep -m1 -oP 'Région détectée par Steam : \K\S+' <<<"$logtxt")
-skipped=$(grep -q '^Nuit (00h-06h à Paris) : vérification sautée' <<<"$logtxt" && echo true || echo false)
+skipped=$(grep -q '^Hors plage pour ce cron : vérification sautée' <<<"$logtxt" && echo true || echo false)
 error=$(grep -m1 -oP 'ERREUR : \K.*' <<<"$logtxt")
 products=$(grep -P '\] (rupture|EN STOCK) +: ' <<<"$logtxt" \
   | sed -E 's/.*\] (rupture|EN STOCK) +: (\S+) (\S+) ?([^|]*)\|.*/\1\t\2\t\3\t\4/' \

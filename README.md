@@ -2,7 +2,7 @@
 
 > **Pour reprendre le projet (humain ou IA) : lire d'abord [`HANDOFF.md`](HANDOFF.md).**
 
-GitHub Action qui vérifie toutes les ~5 min (de 6h à minuit, heure de Paris) la page
+GitHub Action qui vérifie toutes les ~5 min de 6h à minuit et toutes les ~15 min la nuit (heure de Paris) la page
 [Steam Deck Certified Refurbished](https://store.steampowered.com/sale/steamdeckrefurbished)
 (région FR) et envoie un message Telegram dès qu'**un modèle** (LCD 64/256/512 Go, OLED 512 Go/1 To)
 passe en stock, puis quand il repasse en rupture.
@@ -36,7 +36,7 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt pytest
 ## Déclenchement local (optionnel)
 
 Le cron GitHub peut prendre du retard ou sauter des créneaux. Une crontab locale peut déclencher le workflow
-toutes les 5 min et tenir un journal (JSON + tableau) : voir [`local/`](local/) et `HANDOFF.md` §7.
+toutes les 5 min (15 min la nuit) et tenir un journal (JSON + tableau) : voir [`local/`](local/) et `HANDOFF.md` §7.
 
 ```bash
 local/install.sh          # copie les scripts dans ~/.local/bin et affiche la ligne de crontab

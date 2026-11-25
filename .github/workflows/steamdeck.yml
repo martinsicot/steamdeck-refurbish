@@ -2,9 +2,11 @@ name: Steam Deck refurb alert
 
 on:
   schedule:
-    # Toutes les 5 min (:02, :07, :12…, évite :00/:30), heures en UTC. 4h-22h UTC couvre 6h-minuit
-    # à Paris été comme hiver ; le job "gate" coupe ensuite exactement entre 00:00 et 06:00 heure de Paris.
+    # Heures en UTC. Jour : toutes les 5 min (:02, :07, :12…, évite :00/:30) ; 4h-22h UTC couvre 6h-minuit
+    # à Paris été comme hiver. Nuit : toutes les 15 min (:04, :19, :34, :49) ; 22h-4h UTC couvre 0h-6h à Paris.
+    # Le job "gate" garde chaque cron sur sa plage exacte en heure de Paris (jour >= 6h, nuit < 6h).
     - cron: "2-59/5 4-22 * * *"
+    - cron: "4-59/15 0-4,22,23 * * *"
   workflow_dispatch:
     inputs:
       test_telegram:
@@ -28,13 +30,18 @@ jobs:
       - id: hour
         run: |
           h=$(TZ=Europe/Paris date +%-H)
-          echo "Heure de Paris : $(TZ=Europe/Paris date +%H:%M)"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$h" -ge 6 ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
+          echo "Heure de Paris : $(TZ=Europe/Paris date +%H:%M) — cron : ${{ github.event.schedule }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            run=true
+          elif [ "${{ github.event.schedule }}" = "4-59/15 0-4,22,23 * * *" ]; then
+            # cron de nuit (15 min) : uniquement entre 00:00 et 05:59 à Paris
+            [ "$h" -lt 6 ] && run=true || run=false
           else
-            echo "Nuit (00h-06h à Paris) : vérification sautée."
-            echo "run=false" >> "$GITHUB_OUTPUT"
+            # cron de jour (5 min) : uniquement à partir de 06:00 à Paris
+            [ "$h" -ge 6 ] && run=true || run=false
           fi
+          [ "$run" = true ] || echo "Hors plage pour ce cron : vérification sautée."
+          echo "run=$run" >> "$GITHUB_OUTPUT"
 
   check:
     needs: gate

@@ -9,7 +9,7 @@
 - **But** : recevoir un message **Telegram** quand un Steam Deck *Valve Certified Refurbished*, **n'importe quel modèle**,
   passe en stock (et quand il repasse en rupture) sur
   <https://store.steampowered.com/sale/steamdeckrefurbished>, **région France**.
-- **Où ça tourne** : GitHub Actions, sur le repo public `martinsicot/steamdeck-refurbish`, toutes les ~5 min de 6h à minuit (heure de Paris).
+- **Où ça tourne** : GitHub Actions, sur le repo public `martinsicot/steamdeck-refurbish`, toutes les ~5 min de 6h à minuit, toutes les ~15 min de minuit à 6h (heure de Paris).
 - **Déclencheurs** : le cron GitHub **et** une crontab sur la machine locale du propriétaire (voir §6 et §7).
 - **État au 18/11/2026** : tout fonctionne de bout en bout (région FR confirmée depuis GitHub, Telegram OK). Les 5 modèles sont en rupture.
 
@@ -20,7 +20,7 @@
                           ├─► workflow "Steam Deck refurb alert" (.github/workflows/steamdeck.yml)
  crontab locale ──► gh workflow run (workflow_dispatch) ─┘
                                    │
-                    job gate : heure de Paris < 6h et run planifié ?  ─► oui : stop (nuit)
+                    job gate : run planifié hors de la plage de son cron ?  ─► oui : stop
                                    │ non
                     job check : python check_stock.py
                                    │   Playwright/Chromium charge la page (rendu JS),
@@ -76,9 +76,11 @@
 
 ## 6. Planification GitHub
 
-- Cron : `2-59/5 4-22 * * *` en **UTC**. Il évite les créneaux :00 et :30, très chargés. La plage 4h-22h UTC couvre
-  6h-minuit à Paris en été comme en hiver. Le job `gate` coupe ensuite exactement de 00:00 à 05:59 heure de Paris
-  (les déclenchements manuels passent toujours).
+- Deux crons, en **UTC**, qui évitent les créneaux :00 et :30, très chargés :
+  - jour : `2-59/5 4-22 * * *` (toutes les 5 min). La plage 4h-22h UTC couvre 6h-minuit à Paris en été comme en hiver ;
+  - nuit : `4-59/15 0-4,22,23 * * *` (toutes les 15 min). La plage 22h-4h UTC couvre 0h-6h à Paris en été comme en hiver.
+  Le job `gate` identifie le cron via `github.event.schedule` et ne garde que sa plage exacte en heure de Paris
+  (jour : à partir de 06:00 ; nuit : 00:00-05:59). Les déclenchements manuels passent toujours.
 - **Incident du 17/11/2026** : **aucun** run `schedule` pendant environ 8h30 après le dernier push du workflow.
   Premier run planifié à 22:50 (heure de Paris), réussi. Pistes testées entre-temps : commits rattachés à un compte GitHub
   (e-mail noreply), décalage des minutes. Cause exacte inconnue : GitHub met parfois des heures à prendre en compte un
@@ -91,7 +93,7 @@
 
 Installés sur la machine du propriétaire, dans `~/.local/bin/` (copie de référence dans `local/`, installation : `local/install.sh`).
 
-- **Crontab** (`local/crontab.txt`) : `*/5 6-23 * * *`, en heure locale (Paris), lance `steamdeck-trigger`.
+- **Crontab** (`local/crontab.txt`) : `*/5 6-23 * * *` et `*/15 0-5 * * *`, en heure locale (Paris), lancent `steamdeck-trigger`.
 - **`steamdeck-trigger`** : `gh workflow run`, retrouve le run créé, attend sa fin (max 8 min), lit son log, puis ajoute
   **une ligne JSON** dans `~/.local/state/steamdeck-trigger.log`, et **une ligne de tableau** dans `~/.local/state/steamdeck-stock.txt`.
   Ses erreurs propres vont dans `~/.local/state/steamdeck-trigger.err`.
